@@ -466,36 +466,50 @@ function Home() {
      SEARCH
   ===================================================== */
 const BASE_URL =
-  import.meta.env.VITE_API_URL ||
-  "http://localhost:5000";
-
+  import.meta.env.DEV
+    ? "http://localhost:5000"
+    : "";
 const searchSongs = async () => {
-  const query =
-    search.trim() || "Bollywood songs";
+  const query = search.trim();
+
+  if (!query) {
+    setSearchError("Please enter a song or artist name.");
+    return;
+  }
 
   setLoading(true);
+  setSearchError("");
 
   try {
     const response = await fetch(
       `${BASE_URL}/api/youtube/search?q=${encodeURIComponent(query)}`
     );
 
+    const data = await response.json();
+
     if (!response.ok) {
       throw new Error(
-        `Server returned ${response.status}`
+        data?.error?.message ||
+        data?.message ||
+        `Server error: ${response.status}`
       );
     }
 
-    const data = await response.json();
+    if (!Array.isArray(data)) {
+      throw new Error("Invalid response from server.");
+    }
 
     setSongs(data);
+
+    if (data.length === 0) {
+      setSearchError("No songs found.");
+    }
   } catch (error) {
     console.error("Search error:", error);
 
     setSongs([]);
-
     setSearchError(
-      "Unable to connect to the music server."
+      "Unable to search songs. Please try again."
     );
   } finally {
     setLoading(false);
