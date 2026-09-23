@@ -467,7 +467,7 @@ function Home() {
   ===================================================== */
 const BASE_URL =
   import.meta.env.DEV
-    ? "http://localhost:5000"
+    ? "http://localhost:5001"
     : "";
 const searchSongs = async () => {
   const query = search.trim();
