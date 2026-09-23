@@ -1,6 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.DEV ? "http://localhost:5001" : "https://echo-6piz.onrender.com");
+
 const trendingSongs = [
   {
     id: "trending-1",
@@ -71,6 +75,7 @@ function Home() {
   const [search, setSearch] = useState("");
   const [songs, setSongs] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
 
   /* =====================================================
      PLAYER
@@ -79,17 +84,14 @@ function Home() {
   const [currentSong, setCurrentSong] = useState(null);
   const [currentQueue, setCurrentQueue] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
   const youtubePlayerRef = useRef(null);
   const youtubeLoadingRef = useRef(false);
-
   const queueRef = useRef([]);
   const indexRef = useRef(0);
-
   const progressIntervalRef = useRef(null);
 
   /* =====================================================
@@ -108,6 +110,7 @@ function Home() {
         }
       }
 
+      // Old single playlist migration
       const oldPlaylist = localStorage.getItem("echoPlaylist");
 
       if (oldPlaylist) {
@@ -138,7 +141,7 @@ function Home() {
   const [selectedSong, setSelectedSong] = useState(null);
 
   /* =====================================================
-     KEEP REFS UPDATED
+     KEEP PLAYER REFS UPDATED
   ===================================================== */
 
   useEffect(() => {
@@ -160,6 +163,7 @@ function Home() {
         JSON.stringify(playlists)
       );
 
+      // Update Home/Songs page inside same tab
       window.dispatchEvent(
         new Event("echoPlaylistsUpdated")
       );
@@ -175,10 +179,12 @@ function Home() {
   useEffect(() => {
     const updatePlaylists = () => {
       try {
-        const saved =
-          localStorage.getItem("echoPlaylists");
+        const saved = localStorage.getItem("echoPlaylists");
 
-        if (!saved) return;
+        if (!saved) {
+          setPlaylists([]);
+          return;
+        }
 
         const parsed = JSON.parse(saved);
 
@@ -186,10 +192,7 @@ function Home() {
           setPlaylists(parsed);
         }
       } catch (error) {
-        console.error(
-          "Playlist update error:",
-          error
-        );
+        console.error("Playlist update error:", error);
       }
     };
 
@@ -217,11 +220,51 @@ function Home() {
   }, []);
 
   /* =====================================================
+     STOP PROGRESS
+  ===================================================== */
+
+  const stopProgressTracking = () => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+  };
+
+  /* =====================================================
+     START PROGRESS
+  ===================================================== */
+
+  const startProgressTracking = () => {
+    stopProgressTracking();
+
+    progressIntervalRef.current = setInterval(() => {
+      const player = youtubePlayerRef.current;
+
+      if (!player) return;
+
+      try {
+        const time = player.getCurrentTime();
+        const total = player.getDuration();
+
+        if (typeof time === "number") {
+          setCurrentTime(time);
+        }
+
+        if (typeof total === "number") {
+          setDuration(total);
+        }
+      } catch {
+        // YouTube player may not be ready.
+      }
+    }, 500);
+  };
+
+  /* =====================================================
      YOUTUBE PLAYER
   ===================================================== */
 
   useEffect(() => {
-    if (!currentSong) return;
+    if (!currentSong?.id) return;
 
     let cancelled = false;
 
@@ -286,12 +329,12 @@ function Home() {
           return;
         }
 
-        /*
-         * Player already exists.
-         * Load the new video.
-         */
-
-        if (youtubePlayerRef.current) {
+        /* Existing player */
+        if (
+          youtubePlayerRef.current &&
+          typeof youtubePlayerRef.current.loadVideoById ===
+            "function"
+        ) {
           try {
             youtubePlayerRef.current.loadVideoById(
               currentSong.id
@@ -299,12 +342,16 @@ function Home() {
 
             youtubePlayerRef.current.playVideo();
 
+            setPlaying(true);
+
             return;
           } catch (error) {
             console.error(
-              "Existing player error:",
+              "Existing YouTube player error:",
               error
             );
+
+            youtubePlayerRef.current = null;
           }
         }
 
@@ -343,7 +390,11 @@ function Home() {
                     const videoDuration =
                       event.target.getDuration();
 
-                    if (videoDuration) {
+                    if (
+                      typeof videoDuration ===
+                        "number" &&
+                      videoDuration > 0
+                    ) {
                       setDuration(videoDuration);
                     }
                   } catch (error) {
@@ -380,12 +431,41 @@ function Home() {
                     setPlaying(false);
                     stopProgressTracking();
 
-                    playNext();
+                    const queue =
+                      queueRef.current;
+
+                    const index =
+                      indexRef.current;
+
+                    const nextIndex =
+                      index + 1;
+
+                    if (
+                      queue.length > 0 &&
+                      nextIndex < queue.length
+                    ) {
+                      const nextSong =
+                        queue[nextIndex];
+
+                      indexRef.current =
+                        nextIndex;
+
+                      setCurrentIndex(
+                        nextIndex
+                      );
+
+                      setCurrentTime(0);
+                      setDuration(0);
+                      setCurrentSong(
+                        nextSong
+                      );
+                    }
                   }
                 },
 
                 onError: (event) => {
-                  youtubeLoadingRef.current = false;
+                  youtubeLoadingRef.current =
+                    false;
 
                   console.error(
                     "YouTube player error:",
@@ -413,108 +493,110 @@ function Home() {
   }, [currentSong]);
 
   /* =====================================================
-     PROGRESS TRACKING
+     CLEANUP PLAYER
   ===================================================== */
-
-  const startProgressTracking = () => {
-    stopProgressTracking();
-
-    progressIntervalRef.current =
-      setInterval(() => {
-        const player =
-          youtubePlayerRef.current;
-
-        if (!player) return;
-
-        try {
-          const time =
-            player.getCurrentTime();
-
-          const total =
-            player.getDuration();
-
-          if (typeof time === "number") {
-            setCurrentTime(time);
-          }
-
-          if (typeof total === "number") {
-            setDuration(total);
-          }
-        } catch {
-          // Player not ready.
-        }
-      }, 500);
-  };
-
-  const stopProgressTracking = () => {
-    if (progressIntervalRef.current) {
-      clearInterval(
-        progressIntervalRef.current
-      );
-
-      progressIntervalRef.current = null;
-    }
-  };
 
   useEffect(() => {
     return () => {
       stopProgressTracking();
+
+      if (
+        youtubePlayerRef.current &&
+        typeof youtubePlayerRef.current.destroy ===
+          "function"
+      ) {
+        try {
+          youtubePlayerRef.current.destroy();
+        } catch {
+          // Ignore cleanup error
+        }
+      }
+
+      youtubePlayerRef.current = null;
     };
   }, []);
 
   /* =====================================================
      SEARCH
   ===================================================== */
-const BASE_URL =
-  import.meta.env.DEV
-    ? "http://localhost:5001"
-    : "";
-const searchSongs = async () => {
-  const query = search.trim();
 
-  if (!query) {
-    setSearchError("Please enter a song or artist name.");
-    return;
-  }
+  const searchSongs = async () => {
+    const query = search.trim();
 
-  setLoading(true);
-  setSearchError("");
-
-  try {
-    const response = await fetch(
-      `${BASE_URL}/api/youtube/search?q=${encodeURIComponent(query)}`
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(
-        data?.error?.message ||
-        data?.message ||
-        `Server error: ${response.status}`
+    if (!query) {
+      setSearchError(
+        "Please enter a song or artist name."
       );
+      setSongs([]);
+      return;
     }
 
-    if (!Array.isArray(data)) {
-      throw new Error("Invalid response from server.");
+    setLoading(true);
+    setSearchError("");
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/youtube/search?q=${encodeURIComponent(
+          query
+        )}`
+      );
+
+      let data;
+
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error(
+          "Server returned an invalid response."
+        );
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error?.message ||
+            data?.message ||
+            `Server error: ${response.status}`
+        );
+      }
+
+      if (!Array.isArray(data)) {
+        throw new Error(
+          "Invalid response from server."
+        );
+      }
+
+      setSongs(data);
+
+      if (data.length === 0) {
+        setSearchError(
+          "No songs found. Try another search."
+        );
+      }
+    } catch (error) {
+      console.error("Search error:", error);
+
+      setSongs([]);
+
+      const message =
+        error?.message || "";
+
+      if (
+        message.toLowerCase().includes("quota") ||
+        message.includes("429")
+      ) {
+        setSearchError(
+          "YouTube search limit has been reached. Please try again after the quota resets."
+        );
+      } else {
+        setSearchError(
+          "Unable to search songs. Please check your connection and try again."
+        );
+      }
+    } finally {
+      setLoading(false);
     }
+  };
 
-    setSongs(data);
-
-    if (data.length === 0) {
-      setSearchError("No songs found.");
-    }
-  } catch (error) {
-    console.error("Search error:", error);
-
-    setSongs([]);
-    setSearchError(
-      "Unable to search songs. Please try again."
-    );
-  } finally {
-    setLoading(false);
-  }
-};
   const handleSearchKeyDown = (event) => {
     if (event.key === "Enter") {
       searchSongs();
@@ -543,7 +625,6 @@ const searchSongs = async () => {
 
     setCurrentTime(0);
     setDuration(0);
-
     setCurrentSong(song);
   };
 
@@ -601,7 +682,7 @@ const searchSongs = async () => {
 
         return;
       } catch {
-        // Continue.
+        // Continue to previous song
       }
     }
 
@@ -627,14 +708,12 @@ const searchSongs = async () => {
   ===================================================== */
 
   const togglePlayPause = () => {
-    const player =
-      youtubePlayerRef.current;
+    const player = youtubePlayerRef.current;
 
     if (!player || !window.YT) {
       console.log(
         "YouTube player is not ready."
       );
-
       return;
     }
 
@@ -647,10 +726,8 @@ const searchSongs = async () => {
         window.YT.PlayerState.PLAYING
       ) {
         player.pauseVideo();
-        setPlaying(false);
       } else {
         player.playVideo();
-        setPlaying(true);
       }
     } catch (error) {
       console.error(
@@ -665,8 +742,9 @@ const searchSongs = async () => {
   ===================================================== */
 
   const seekSong = (event) => {
-    const value =
-      Number(event.target.value);
+    const value = Number(
+      event.target.value
+    );
 
     setCurrentTime(value);
 
@@ -697,11 +775,13 @@ const searchSongs = async () => {
       return "0:00";
     }
 
-    const minutes =
-      Math.floor(seconds / 60);
+    const minutes = Math.floor(
+      seconds / 60
+    );
 
-    const remainingSeconds =
-      Math.floor(seconds % 60);
+    const remainingSeconds = Math.floor(
+      seconds % 60
+    );
 
     return `${minutes}:${remainingSeconds
       .toString()
@@ -712,15 +792,12 @@ const searchSongs = async () => {
      PLAY SAVED PLAYLIST
   ===================================================== */
 
-  const playSavedPlaylist = (
-    playlist
-  ) => {
+  const playSavedPlaylist = (playlist) => {
     if (
       !playlist.songs ||
       playlist.songs.length === 0
     ) {
       alert("This playlist is empty.");
-
       return;
     }
 
@@ -795,9 +872,7 @@ const searchSongs = async () => {
      DELETE PLAYLIST
   ===================================================== */
 
-  const deletePlaylist = (
-    playlistId
-  ) => {
+  const deletePlaylist = (playlistId) => {
     const playlist =
       playlists.find(
         (item) =>
@@ -825,9 +900,7 @@ const searchSongs = async () => {
      OPEN ADD PLAYLIST MODAL
   ===================================================== */
 
-  const openPlaylistModal = (
-    song
-  ) => {
+  const openPlaylistModal = (song) => {
     setSelectedSong(song);
     setShowPlaylistModal(true);
   };
@@ -846,14 +919,20 @@ const searchSongs = async () => {
     setPlaylists((previous) =>
       previous.map((playlist) => {
         if (
-          playlist.id !==
-          playlistId
+          playlist.id !== playlistId
         ) {
           return playlist;
         }
 
+        const songs =
+          Array.isArray(
+            playlist.songs
+          )
+            ? playlist.songs
+            : [];
+
         const alreadyExists =
-          playlist.songs.some(
+          songs.some(
             (song) =>
               song.id ===
               selectedSong.id
@@ -865,9 +944,8 @@ const searchSongs = async () => {
 
         return {
           ...playlist,
-
           songs: [
-            ...playlist.songs,
+            ...songs,
             selectedSong,
           ],
         };
@@ -882,44 +960,40 @@ const searchSongs = async () => {
      CREATE PLAYLIST WITH SONG
   ===================================================== */
 
-  const createPlaylistWithSong =
-    () => {
-      const name =
-        newPlaylistName.trim();
+  const createPlaylistWithSong = () => {
+    const name =
+      newPlaylistName.trim();
 
-      if (
-        !name ||
-        !selectedSong
-      ) {
-        return;
-      }
+    if (!name || !selectedSong) {
+      return;
+    }
 
-      const newPlaylist = {
-        id:
-          "playlist-" +
-          Date.now() +
-          "-" +
-          Math.random()
-            .toString(36)
-            .slice(2),
+    const newPlaylist = {
+      id:
+        "playlist-" +
+        Date.now() +
+        "-" +
+        Math.random()
+          .toString(36)
+          .slice(2),
 
-        name,
+      name,
 
-        songs: [selectedSong],
-      };
-
-      setPlaylists((previous) => [
-        ...previous,
-        newPlaylist,
-      ]);
-
-      setNewPlaylistName("");
-      setSelectedSong(null);
-      setShowPlaylistModal(false);
+      songs: [selectedSong],
     };
 
+    setPlaylists((previous) => [
+      ...previous,
+      newPlaylist,
+    ]);
+
+    setNewPlaylistName("");
+    setSelectedSong(null);
+    setShowPlaylistModal(false);
+  };
+
   /* =====================================================
-     REMOVE SONG
+     REMOVE SONG FROM PLAYLIST
   ===================================================== */
 
   const removeSongFromPlaylist = (
@@ -929,8 +1003,7 @@ const searchSongs = async () => {
     setPlaylists((previous) =>
       previous.map((playlist) => {
         if (
-          playlist.id !==
-          playlistId
+          playlist.id !== playlistId
         ) {
           return playlist;
         }
@@ -938,11 +1011,12 @@ const searchSongs = async () => {
         return {
           ...playlist,
 
-          songs:
-            playlist.songs.filter(
-              (song) =>
-                song.id !== songId
-            ),
+          songs: (
+            playlist.songs || []
+          ).filter(
+            (song) =>
+              song.id !== songId
+          ),
         };
       })
     );
@@ -960,14 +1034,12 @@ const searchSongs = async () => {
       ================================================= */}
 
       <nav className="sticky top-0 z-40 border-b border-white/10 bg-black/90 backdrop-blur-xl">
-
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
 
           <Link
             to="/"
             className="flex items-center gap-3"
           >
-
             <img
               src="/echo-logo.jpg"
               alt="ECHO"
@@ -977,11 +1049,9 @@ const searchSongs = async () => {
             <span className="text-2xl font-black">
               ECHO
             </span>
-
           </Link>
 
           <div className="hidden items-center gap-8 md:flex">
-
             <a
               href="#home"
               className="text-sm text-white/70 hover:text-white"
@@ -1002,11 +1072,9 @@ const searchSongs = async () => {
             >
               Playlists
             </a>
-
           </div>
 
           <div className="flex items-center gap-3">
-
             <Link
               to="/login"
               className="hidden px-4 py-2 text-sm font-semibold text-white/70 hover:text-white sm:block"
@@ -1020,11 +1088,8 @@ const searchSongs = async () => {
             >
               Sign up
             </Link>
-
           </div>
-
         </div>
-
       </nav>
 
       {/* =================================================
@@ -1035,13 +1100,10 @@ const searchSongs = async () => {
         id="home"
         className="relative overflow-hidden"
       >
-
         <div className="absolute inset-0">
-
           <div className="absolute left-1/4 top-20 h-72 w-72 rounded-full bg-[#27E6B0]/10 blur-[120px]" />
 
           <div className="absolute right-1/4 top-40 h-96 w-96 rounded-full bg-purple-500/10 blur-[140px]" />
-
         </div>
 
         <div className="relative mx-auto max-w-7xl px-5 pb-20 pt-20 md:pb-28 md:pt-28">
@@ -1049,21 +1111,17 @@ const searchSongs = async () => {
           <div className="max-w-4xl">
 
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#27E6B0]/20 bg-[#27E6B0]/5 px-4 py-2 text-sm text-[#27E6B0]">
-
               <span className="h-2 w-2 animate-pulse rounded-full bg-[#27E6B0]" />
 
               Your music. Your ECHO.
-
             </div>
 
             <h1 className="text-5xl font-black leading-[1.02] md:text-7xl">
-
               Music that
 
               <span className="block text-[#27E6B0]">
                 sounds like you.
               </span>
-
             </h1>
 
             <p className="mt-7 max-w-2xl text-lg leading-8 text-white/55 md:text-xl">
@@ -1072,6 +1130,8 @@ const searchSongs = async () => {
               personal listening experience with ECHO.
             </p>
 
+            {/* SEARCH */}
+
             <div className="mt-10 max-w-2xl">
 
               <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-2">
@@ -1079,11 +1139,15 @@ const searchSongs = async () => {
                 <input
                   type="text"
                   value={search}
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setSearch(
                       event.target.value
-                    )
-                  }
+                    );
+
+                    if (searchError) {
+                      setSearchError("");
+                    }
+                  }}
                   onKeyDown={
                     handleSearchKeyDown
                   }
@@ -1100,15 +1164,24 @@ const searchSongs = async () => {
                     ? "Searching..."
                     : "Search"}
                 </button>
-
               </div>
 
+              {/* SEARCH ERROR */}
+
+              {searchError && (
+                <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                  {searchError}
+                </div>
+              )}
+
+              {/* API URL DEBUG */}
+
+              <p className="mt-2 text-xs text-white/20">
+                Music server: {API_BASE_URL}
+              </p>
             </div>
-
           </div>
-
         </div>
-
       </section>
 
       {/* =================================================
@@ -1116,11 +1189,9 @@ const searchSongs = async () => {
       ================================================= */}
 
       {songs.length > 0 && (
-
         <section className="mx-auto max-w-7xl px-5 pb-16">
 
           <div className="mb-6">
-
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#27E6B0]">
               Search
             </p>
@@ -1128,81 +1199,68 @@ const searchSongs = async () => {
             <h2 className="mt-2 text-3xl font-black">
               Search Results
             </h2>
-
           </div>
 
           <div className="grid gap-3">
 
-            {songs.map(
-              (song, index) => (
+            {songs.map((song, index) => (
+              <div
+                key={`${song.id}-${index}`}
+                className="group flex items-center gap-4 rounded-2xl border border-white/5 bg-white/[0.03] p-3 hover:bg-white/[0.06]"
+              >
 
-                <div
-                  key={`${song.id}-${index}`}
-                  className="group flex items-center gap-4 rounded-2xl border border-white/5 bg-white/[0.03] p-3 hover:bg-white/[0.06]"
+                <button
+                  onClick={() =>
+                    playSong(
+                      song,
+                      songs,
+                      index
+                    )
+                  }
+                  className="relative shrink-0"
                 >
+                  <img
+                    src={song.artwork}
+                    alt={song.title}
+                    className="h-16 w-16 rounded-xl object-cover"
+                  />
 
-                  <button
-                    onClick={() =>
-                      playSong(
-                        song,
-                        songs,
-                        index
-                      )
-                    }
-                    className="relative shrink-0"
-                  >
+                  <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/50 opacity-0 group-hover:opacity-100">
+                    ▶
+                  </div>
+                </button>
 
-                    <img
-                      src={song.artwork}
-                      alt={song.title}
-                      className="h-16 w-16 rounded-xl object-cover"
-                    />
+                <button
+                  onClick={() =>
+                    playSong(
+                      song,
+                      songs,
+                      index
+                    )
+                  }
+                  className="min-w-0 flex-1 text-left"
+                >
+                  <p className="truncate font-bold">
+                    {song.title}
+                  </p>
 
-                    <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/50 opacity-0 group-hover:opacity-100">
-                      ▶
-                    </div>
+                  <p className="mt-1 truncate text-sm text-white/45">
+                    {song.artist}
+                  </p>
+                </button>
 
-                  </button>
-
-                  <button
-                    onClick={() =>
-                      playSong(
-                        song,
-                        songs,
-                        index
-                      )
-                    }
-                    className="min-w-0 flex-1 text-left"
-                  >
-
-                    <p className="truncate font-bold">
-                      {song.title}
-                    </p>
-
-                    <p className="mt-1 truncate text-sm text-white/45">
-                      {song.artist}
-                    </p>
-
-                  </button>
-
-                  <button
-                    onClick={() =>
-                      openPlaylistModal(song)
-                    }
-                    className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-xl text-white/70 hover:border-[#27E6B0] hover:text-[#27E6B0]"
-                  >
-                    +
-                  </button>
-
-                </div>
-
-              )
-            )}
-
+                <button
+                  onClick={() =>
+                    openPlaylistModal(song)
+                  }
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-xl text-white/70 hover:border-[#27E6B0] hover:text-[#27E6B0]"
+                >
+                  +
+                </button>
+              </div>
+            ))}
           </div>
-
         </section>
-
       )}
 
       {/* =================================================
@@ -1215,7 +1273,6 @@ const searchSongs = async () => {
       >
 
         <div className="mb-8">
-
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#27E6B0]">
             Discover
           </p>
@@ -1223,14 +1280,12 @@ const searchSongs = async () => {
           <h2 className="mt-2 text-3xl font-black md:text-4xl">
             Trending now
           </h2>
-
         </div>
 
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-5">
 
           {trendingSongs.map(
             (song, index) => (
-
               <div
                 key={song.id}
                 className="group"
@@ -1246,7 +1301,6 @@ const searchSongs = async () => {
                   }
                   className="relative block w-full overflow-hidden rounded-2xl"
                 >
-
                   <img
                     src={song.artwork}
                     alt={song.title}
@@ -1254,17 +1308,13 @@ const searchSongs = async () => {
                   />
 
                   <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100">
-
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#27E6B0] text-black">
                       ▶
                     </div>
-
                   </div>
-
                 </button>
 
                 <div className="mt-3">
-
                   <p className="truncate font-bold">
                     {song.title}
                   </p>
@@ -1272,16 +1322,11 @@ const searchSongs = async () => {
                   <p className="mt-1 truncate text-sm text-white/40">
                     {song.artist}
                   </p>
-
                 </div>
-
               </div>
-
             )
           )}
-
         </div>
-
       </section>
 
       {/* =================================================
@@ -1296,7 +1341,6 @@ const searchSongs = async () => {
         <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
 
           <div>
-
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#27E6B0]">
               Your Library
             </p>
@@ -1308,7 +1352,6 @@ const searchSongs = async () => {
             <p className="mt-2 text-white/45">
               Your playlists from ECHO.
             </p>
-
           </div>
 
           <button
@@ -1319,11 +1362,9 @@ const searchSongs = async () => {
           >
             + Create Playlist
           </button>
-
         </div>
 
         {playlists.length === 0 ? (
-
           <div className="rounded-3xl border border-dashed border-white/10 bg-white/[0.02] p-12 text-center">
 
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#27E6B0]/10 text-3xl">
@@ -1346,200 +1387,164 @@ const searchSongs = async () => {
             >
               Create Playlist
             </button>
-
           </div>
-
         ) : (
-
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
 
-            {playlists.map(
-              (playlist) => {
+            {playlists.map((playlist) => {
+              const firstSong =
+                playlist.songs?.[0];
 
-                const firstSong =
-                  playlist.songs?.[0];
+              return (
+                <div
+                  key={playlist.id}
+                  className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]"
+                >
 
-                return (
+                  <div className="relative">
 
-                  <div
-                    key={playlist.id}
-                    className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]"
-                  >
+                    {firstSong?.artwork ? (
+                      <img
+                        src={firstSong.artwork}
+                        alt={playlist.name}
+                        className="aspect-[16/9] w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex aspect-[16/9] w-full items-center justify-center bg-gradient-to-br from-[#27E6B0]/20 to-purple-500/20">
+                        <span className="text-5xl text-[#27E6B0]">
+                          ♪
+                        </span>
+                      </div>
+                    )}
 
-                    <div className="relative">
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
 
-                      {firstSong?.artwork ? (
+                    <button
+                      onClick={() =>
+                        playSavedPlaylist(
+                          playlist
+                        )
+                      }
+                      disabled={
+                        !playlist.songs ||
+                        playlist.songs.length ===
+                          0
+                      }
+                      className="absolute bottom-4 right-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#27E6B0] text-black disabled:opacity-40"
+                    >
+                      ▶
+                    </button>
+                  </div>
 
-                        <img
-                          src={
-                            firstSong.artwork
-                          }
-                          alt={
-                            playlist.name
-                          }
-                          className="aspect-[16/9] w-full object-cover"
-                        />
+                  <div className="p-5">
 
-                      ) : (
+                    <div className="flex items-start justify-between gap-3">
 
-                        <div className="flex aspect-[16/9] w-full items-center justify-center bg-gradient-to-br from-[#27E6B0]/20 to-purple-500/20">
+                      <div className="min-w-0">
 
-                          <span className="text-5xl text-[#27E6B0]">
-                            ♪
-                          </span>
+                        <h3 className="truncate text-xl font-black">
+                          {playlist.name}
+                        </h3>
 
-                        </div>
-
-                      )}
-
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
+                        <p className="mt-1 text-sm text-white/40">
+                          {playlist.songs?.length ||
+                            0}{" "}
+                          {playlist.songs?.length ===
+                          1
+                            ? "song"
+                            : "songs"}
+                        </p>
+                      </div>
 
                       <button
                         onClick={() =>
-                          playSavedPlaylist(
-                            playlist
+                          deletePlaylist(
+                            playlist.id
                           )
                         }
-                        disabled={
-                          !playlist.songs ||
-                          playlist.songs
-                            .length === 0
-                        }
-                        className="absolute bottom-4 right-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#27E6B0] text-black disabled:opacity-40"
+                        className="shrink-0 rounded-lg px-2 py-1 text-sm text-red-400 hover:bg-red-500/10"
                       >
-                        ▶
+                        Delete
                       </button>
-
                     </div>
 
-                    <div className="p-5">
+                    {playlist.songs?.length >
+                      0 && (
+                      <div className="mt-5 max-h-48 space-y-2 overflow-y-auto">
 
-                      <div className="flex items-start justify-between gap-3">
+                        {playlist.songs.map(
+                          (
+                            song,
+                            songIndex
+                          ) => (
+                            <div
+                              key={`${song.id}-${songIndex}`}
+                              className="flex items-center gap-3 rounded-xl bg-white/[0.03] p-2"
+                            >
 
-                        <div className="min-w-0">
-
-                          <h3 className="truncate text-xl font-black">
-                            {playlist.name}
-                          </h3>
-
-                          <p className="mt-1 text-sm text-white/40">
-                            {playlist.songs
-                              ?.length || 0}{" "}
-                            {playlist.songs
-                              ?.length === 1
-                              ? "song"
-                              : "songs"}
-                          </p>
-
-                        </div>
-
-                        <button
-                          onClick={() =>
-                            deletePlaylist(
-                              playlist.id
-                            )
-                          }
-                          className="shrink-0 rounded-lg px-2 py-1 text-sm text-red-400 hover:bg-red-500/10"
-                        >
-                          Delete
-                        </button>
-
-                      </div>
-
-                      {playlist.songs
-                        ?.length > 0 && (
-
-                        <div className="mt-5 max-h-48 space-y-2 overflow-y-auto">
-
-                          {playlist.songs.map(
-                            (
-                              song,
-                              songIndex
-                            ) => (
-
-                              <div
-                                key={`${song.id}-${songIndex}`}
-                                className="flex items-center gap-3 rounded-xl bg-white/[0.03] p-2"
+                              <button
+                                onClick={() =>
+                                  playSavedSong(
+                                    playlist,
+                                    songIndex
+                                  )
+                                }
                               >
-
-                                <button
-                                  onClick={() =>
-                                    playSavedSong(
-                                      playlist,
-                                      songIndex
-                                    )
+                                <img
+                                  src={
+                                    song.artwork
                                   }
-                                >
-
-                                  <img
-                                    src={
-                                      song.artwork
-                                    }
-                                    alt={
-                                      song.title
-                                    }
-                                    className="h-10 w-10 rounded-lg object-cover"
-                                  />
-
-                                </button>
-
-                                <button
-                                  onClick={() =>
-                                    playSavedSong(
-                                      playlist,
-                                      songIndex
-                                    )
+                                  alt={
+                                    song.title
                                   }
-                                  className="min-w-0 flex-1 text-left"
-                                >
+                                  className="h-10 w-10 rounded-lg object-cover"
+                                />
+                              </button>
 
-                                  <p className="truncate text-sm font-semibold">
-                                    {
-                                      song.title
-                                    }
-                                  </p>
-
-                                  <p className="truncate text-xs text-white/40">
-                                    {
-                                      song.artist
-                                    }
-                                  </p>
-
-                                </button>
-
-                                <button
-                                  onClick={() =>
-                                    removeSongFromPlaylist(
-                                      playlist.id,
-                                      song.id
-                                    )
+                              <button
+                                onClick={() =>
+                                  playSavedSong(
+                                    playlist,
+                                    songIndex
+                                  )
+                                }
+                                className="min-w-0 flex-1 text-left"
+                              >
+                                <p className="truncate text-sm font-semibold">
+                                  {
+                                    song.title
                                   }
-                                  className="px-2 text-white/30 hover:text-red-400"
-                                >
-                                  ×
-                                </button>
+                                </p>
 
-                              </div>
+                                <p className="truncate text-xs text-white/40">
+                                  {
+                                    song.artist
+                                  }
+                                </p>
+                              </button>
 
-                            )
-                          )}
-
-                        </div>
-
-                      )}
-
-                    </div>
-
+                              <button
+                                onClick={() =>
+                                  removeSongFromPlaylist(
+                                    playlist.id,
+                                    song.id
+                                  )
+                                }
+                                className="px-2 text-white/30 hover:text-red-400"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    )}
                   </div>
-
-                );
-              }
-            )}
-
+                </div>
+              );
+            })}
           </div>
-
         )}
-
       </section>
 
       {/* =================================================
@@ -1549,7 +1554,6 @@ const searchSongs = async () => {
       <section className="mx-auto max-w-7xl px-5 py-16">
 
         <div className="mb-8">
-
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#27E6B0]">
             Explore
           </p>
@@ -1557,14 +1561,12 @@ const searchSongs = async () => {
           <h2 className="mt-2 text-3xl font-black md:text-4xl">
             Find your mood
           </h2>
-
         </div>
 
         <div className="grid gap-5 md:grid-cols-3">
 
           {moodPlaylists.map(
             (playlist) => (
-
               <div
                 key={playlist.id}
                 className="group relative overflow-hidden rounded-3xl"
@@ -1587,16 +1589,11 @@ const searchSongs = async () => {
                   <p className="mt-2 text-sm text-white/60">
                     {playlist.description}
                   </p>
-
                 </div>
-
               </div>
-
             )
           )}
-
         </div>
-
       </section>
 
       {/* =================================================
@@ -1612,7 +1609,6 @@ const searchSongs = async () => {
           <div className="relative grid gap-12 md:grid-cols-2">
 
             <div>
-
               <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#27E6B0]">
                 ECHO Experience
               </p>
@@ -1630,13 +1626,11 @@ const searchSongs = async () => {
                 and enjoy your favorite tracks with
                 ECHO.
               </p>
-
             </div>
 
             <div className="grid grid-cols-2 gap-4">
 
               <div className="rounded-3xl border border-white/10 bg-black/50 p-6">
-
                 <p className="text-4xl font-black text-[#27E6B0]">
                   ∞
                 </p>
@@ -1644,11 +1638,9 @@ const searchSongs = async () => {
                 <p className="mt-3 font-bold">
                   Discover
                 </p>
-
               </div>
 
               <div className="rounded-3xl border border-white/10 bg-black/50 p-6">
-
                 <p className="text-4xl font-black text-[#27E6B0]">
                   ♪
                 </p>
@@ -1656,11 +1648,9 @@ const searchSongs = async () => {
                 <p className="mt-3 font-bold">
                   Listen
                 </p>
-
               </div>
 
               <div className="rounded-3xl border border-white/10 bg-black/50 p-6">
-
                 <p className="text-4xl font-black text-[#27E6B0]">
                   +
                 </p>
@@ -1668,11 +1658,9 @@ const searchSongs = async () => {
                 <p className="mt-3 font-bold">
                   Create
                 </p>
-
               </div>
 
               <div className="rounded-3xl border border-white/10 bg-black/50 p-6">
-
                 <p className="text-4xl font-black text-[#27E6B0]">
                   ◉
                 </p>
@@ -1680,15 +1668,10 @@ const searchSongs = async () => {
                 <p className="mt-3 font-bold">
                   ECHO
                 </p>
-
               </div>
-
             </div>
-
           </div>
-
         </div>
-
       </section>
 
       {/* =================================================
@@ -1714,9 +1697,7 @@ const searchSongs = async () => {
           >
             Get started
           </Link>
-
         </div>
-
       </section>
 
       {/* =================================================
@@ -1724,7 +1705,6 @@ const searchSongs = async () => {
       ================================================= */}
 
       {showCreateModal && (
-
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-5 backdrop-blur-sm">
 
           <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#101010] p-6">
@@ -1743,7 +1723,6 @@ const searchSongs = async () => {
               >
                 ×
               </button>
-
             </div>
 
             <input
@@ -1755,7 +1734,9 @@ const searchSongs = async () => {
                 )
               }
               onKeyDown={(event) => {
-                if (event.key === "Enter") {
+                if (
+                  event.key === "Enter"
+                ) {
                   createPlaylist();
                 }
               }}
@@ -1766,9 +1747,12 @@ const searchSongs = async () => {
             <div className="mt-5 flex justify-end gap-3">
 
               <button
-                onClick={() =>
-                  setShowCreateModal(false)
-                }
+                onClick={() => {
+                  setShowCreateModal(
+                    false
+                  );
+                  setNewPlaylistName("");
+                }}
                 className="rounded-xl px-5 py-3 text-white/60"
               >
                 Cancel
@@ -1776,17 +1760,16 @@ const searchSongs = async () => {
 
               <button
                 onClick={createPlaylist}
-                className="rounded-xl bg-[#27E6B0] px-5 py-3 font-bold text-black"
+                disabled={
+                  !newPlaylistName.trim()
+                }
+                className="rounded-xl bg-[#27E6B0] px-5 py-3 font-bold text-black disabled:opacity-40"
               >
                 Create
               </button>
-
             </div>
-
           </div>
-
         </div>
-
       )}
 
       {/* =================================================
@@ -1795,7 +1778,6 @@ const searchSongs = async () => {
 
       {showPlaylistModal &&
         selectedSong && (
-
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-5 backdrop-blur-sm">
 
             <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-[#101010] p-6">
@@ -1811,7 +1793,6 @@ const searchSongs = async () => {
                   <h3 className="mt-1 truncate text-2xl font-black">
                     {selectedSong.title}
                   </h3>
-
                 </div>
 
                 <button
@@ -1819,14 +1800,12 @@ const searchSongs = async () => {
                     setShowPlaylistModal(
                       false
                     );
-
                     setSelectedSong(null);
                   }}
                   className="text-2xl text-white/40"
                 >
                   ×
                 </button>
-
               </div>
 
               <p className="mb-3 mt-6 text-sm text-white/45">
@@ -1834,12 +1813,10 @@ const searchSongs = async () => {
               </p>
 
               {playlists.length > 0 && (
-
                 <div className="max-h-60 space-y-2 overflow-y-auto">
 
                   {playlists.map(
                     (playlist) => (
-
                       <button
                         key={playlist.id}
                         onClick={() =>
@@ -1851,7 +1828,6 @@ const searchSongs = async () => {
                       >
 
                         <div>
-
                           <p className="font-bold">
                             {playlist.name}
                           </p>
@@ -1861,20 +1837,15 @@ const searchSongs = async () => {
                               ?.length || 0}{" "}
                             songs
                           </p>
-
                         </div>
 
                         <span className="text-xl text-[#27E6B0]">
                           +
                         </span>
-
                       </button>
-
                     )
                   )}
-
                 </div>
-
               )}
 
               <div className="my-6 h-px bg-white/10" />
@@ -1891,7 +1862,9 @@ const searchSongs = async () => {
                   )
                 }
                 onKeyDown={(event) => {
-                  if (event.key === "Enter") {
+                  if (
+                    event.key === "Enter"
+                  ) {
                     createPlaylistWithSong();
                   }
                 }}
@@ -1903,26 +1876,25 @@ const searchSongs = async () => {
                 onClick={
                   createPlaylistWithSong
                 }
-                className="mt-4 w-full rounded-xl bg-[#27E6B0] py-3 font-bold text-black"
+                disabled={
+                  !newPlaylistName.trim()
+                }
+                className="mt-4 w-full rounded-xl bg-[#27E6B0] py-3 font-bold text-black disabled:opacity-40"
               >
                 Create Playlist & Add Song
               </button>
-
             </div>
-
           </div>
-
         )}
 
       {/* =================================================
-          COMPACT ECHO MUSIC PLAYER
+          MUSIC PLAYER
       ================================================= */}
 
       {currentSong && (
-
         <div className="fixed bottom-0 left-0 right-0 z-[80] border-t border-white/10 bg-black/95 backdrop-blur-xl">
 
-          <div className="mx-auto flex h-[205px] max-w-7xl items-center gap-3 px-4 py-2 md:gap-4">
+          <div className="mx-auto flex min-h-[205px] max-w-7xl items-center gap-3 px-4 py-2 md:gap-4">
 
             {/* SONG INFO */}
 
@@ -1943,12 +1915,10 @@ const searchSongs = async () => {
                 <p className="mt-0.5 truncate text-xs text-white/40">
                   {currentSong.artist}
                 </p>
-
               </div>
-
             </div>
 
-            {/* CENTER CONTROLS */}
+            {/* CONTROLS */}
 
             <div className="flex min-w-0 flex-1 flex-col justify-center">
 
@@ -1971,12 +1941,8 @@ const searchSongs = async () => {
                   <p className="truncate text-[11px] text-white/40">
                     {currentSong.artist}
                   </p>
-
                 </div>
-
               </div>
-
-              {/* CONTROLS */}
 
               <div className="flex items-center justify-center gap-2">
 
@@ -1989,9 +1955,7 @@ const searchSongs = async () => {
                 </button>
 
                 <button
-                  onClick={
-                    togglePlayPause
-                  }
+                  onClick={togglePlayPause}
                   title={
                     playing
                       ? "Pause"
@@ -2009,7 +1973,6 @@ const searchSongs = async () => {
                 >
                   ⏭
                 </button>
-
               </div>
 
               {/* PROGRESS */}
@@ -2033,34 +1996,28 @@ const searchSongs = async () => {
                       currentTime
                   )}
                   onChange={seekSong}
-                  className="h-1 flex-1 cursor-pointer accent-[#27E6B0]"
+                  disabled={!duration}
+                  className="h-1 flex-1 cursor-pointer accent-[#27E6B0] disabled:cursor-not-allowed disabled:opacity-30"
                 />
 
                 <span className="w-8 text-[11px] text-white/40">
                   {formatTime(duration)}
                 </span>
-
               </div>
-
             </div>
 
             {/* YOUTUBE PLAYER */}
 
-            <div className="h-[200px] w-[280px] shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black">
+            <div className="hidden h-[200px] w-[280px] shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black sm:block">
 
               <div
                 id="echo-home-youtube-player"
                 className="h-full w-full"
               />
-
             </div>
-
           </div>
-
         </div>
-
       )}
-
     </div>
   );
 }
