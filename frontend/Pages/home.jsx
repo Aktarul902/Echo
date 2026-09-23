@@ -1041,7 +1041,7 @@ function Home() {
             className="flex items-center gap-3"
           >
             <img
-              src="/echo-logo.jpg"
+              src="../src/assets/logo-Photoroom.png"
               alt="ECHO"
               className="h-10 w-10 rounded-full object-cover"
             />
