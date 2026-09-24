@@ -553,69 +553,6 @@ function Home() {
     }
   }, [currentSong, playing]);
 
-  useEffect(() => {
-    if (!("mediaSession" in navigator)) {
-      return;
-    }
-
-    const run = (callback) => {
-      try {
-        callback();
-      } catch (error) {
-        console.warn("Media Session action error:", error);
-      }
-    };
-
-    const handlers = {
-      play: () =>
-        run(() => youtubePlayerRef.current?.playVideo()),
-      pause: () =>
-        run(() => youtubePlayerRef.current?.pauseVideo()),
-      nexttrack: () => run(playNext),
-      previoustrack: () => run(playPrevious),
-      seekbackward: () =>
-        run(() => {
-          const player = youtubePlayerRef.current;
-          if (!player) return;
-          const nextTime = Math.max(
-            0,
-            player.getCurrentTime() - 10
-          );
-          player.seekTo(nextTime, true);
-          setCurrentTime(nextTime);
-        }),
-      seekforward: () =>
-        run(() => {
-          const player = youtubePlayerRef.current;
-          if (!player) return;
-          const total = player.getDuration() || duration;
-          const nextTime = Math.min(
-            total || Number.MAX_SAFE_INTEGER,
-            player.getCurrentTime() + 10
-          );
-          player.seekTo(nextTime, true);
-          setCurrentTime(nextTime);
-        }),
-    };
-
-    Object.entries(handlers).forEach(([action, handler]) => {
-      try {
-        navigator.mediaSession.setActionHandler(action, handler);
-      } catch {
-        // Some browsers do not support every Media Session action.
-      }
-    });
-
-    return () => {
-      Object.keys(handlers).forEach((action) => {
-        try {
-          navigator.mediaSession.setActionHandler(action, null);
-        } catch {
-          // Ignore unsupported actions.
-        }
-      });
-    };
-  }, [currentSong, duration, playNext, playPrevious]);
 
   /* =====================================================
      SEARCH
@@ -803,6 +740,76 @@ function Home() {
     setDuration(0);
     setCurrentSong(previousSong);
   };
+
+  /* =====================================================
+     MOBILE / LOCK-SCREEN MEDIA CONTROLS
+
+     Media Session gives supported mobile browsers access to
+     lock-screen / notification controls. It does NOT bypass
+     YouTube's mobile background-playback restrictions.
+  ===================================================== */
+
+  useEffect(() => {
+    if (!("mediaSession" in navigator)) {
+      return;
+    }
+
+    const run = (callback) => {
+      try {
+        callback();
+      } catch (error) {
+        console.warn("Media Session action error:", error);
+      }
+    };
+
+    const handlers = {
+      play: () =>
+        run(() => youtubePlayerRef.current?.playVideo()),
+      pause: () =>
+        run(() => youtubePlayerRef.current?.pauseVideo()),
+      nexttrack: () => run(playNext),
+      previoustrack: () => run(playPrevious),
+      seekbackward: () =>
+        run(() => {
+          const player = youtubePlayerRef.current;
+          if (!player) return;
+          const nextTime = Math.max(0, player.getCurrentTime() - 10);
+          player.seekTo(nextTime, true);
+          setCurrentTime(nextTime);
+        }),
+      seekforward: () =>
+        run(() => {
+          const player = youtubePlayerRef.current;
+          if (!player) return;
+          const total = player.getDuration() || duration;
+          const nextTime = Math.min(
+            total || Number.MAX_SAFE_INTEGER,
+            player.getCurrentTime() + 10
+          );
+          player.seekTo(nextTime, true);
+          setCurrentTime(nextTime);
+        }),
+    };
+
+    Object.entries(handlers).forEach(([action, handler]) => {
+      try {
+        navigator.mediaSession.setActionHandler(action, handler);
+      } catch {
+        // Some browsers do not support every Media Session action.
+      }
+    });
+
+    return () => {
+      Object.keys(handlers).forEach((action) => {
+        try {
+          navigator.mediaSession.setActionHandler(action, null);
+        } catch {
+          // Ignore unsupported actions.
+        }
+      });
+    };
+  }, [duration]);
+
 
   /* =====================================================
      PLAY / PAUSE
