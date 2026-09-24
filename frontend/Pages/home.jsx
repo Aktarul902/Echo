@@ -66,7 +66,7 @@ const moodPlaylists = [
       "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=900&q=80",
   },
 ];
-
+import logo from "../src/assets/logo.jpeg";
 function Home() {
   /* =====================================================
      SEARCH
@@ -1027,21 +1027,21 @@ function Home() {
   ===================================================== */
 
   return (
-    <div className="min-h-screen bg-black text-white pb-28">
+    <div className="min-h-screen w-screen max-w-[100vw] min-w-0 overflow-x-hidden bg-black text-white pb-28">
 
       {/* =================================================
           NAVBAR
       ================================================= */}
 
       <nav className="sticky top-0 z-40 border-b border-white/10 bg-black/90 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-4 sm:px-5">
 
           <Link
             to="/"
             className="flex items-center gap-3"
           >
             <img
-              src="../src/assets/logo-Photoroom.png"
+              src={logo}
               alt="ECHO"
               className="h-10 w-10 rounded-full object-cover"
             />
@@ -1106,9 +1106,9 @@ function Home() {
           <div className="absolute right-1/4 top-40 h-96 w-96 rounded-full bg-purple-500/10 blur-[140px]" />
         </div>
 
-        <div className="relative mx-auto max-w-7xl px-5 pb-20 pt-20 md:pb-28 md:pt-28">
+        <div className="relative mx-auto w-full max-w-7xl px-4 pb-16 pt-16 sm:px-5 md:pb-28 md:pt-28">
 
-          <div className="max-w-4xl">
+          <div className="w-full max-w-4xl min-w-0">
 
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#27E6B0]/20 bg-[#27E6B0]/5 px-4 py-2 text-sm text-[#27E6B0]">
               <span className="h-2 w-2 animate-pulse rounded-full bg-[#27E6B0]" />
@@ -1116,7 +1116,7 @@ function Home() {
               Your music. Your ECHO.
             </div>
 
-            <h1 className="text-5xl font-black leading-[1.02] md:text-7xl">
+            <h1 className="text-4xl font-black leading-[1.02] sm:text-5xl md:text-7xl">
               Music that
 
               <span className="block text-[#27E6B0]">
@@ -1124,7 +1124,7 @@ function Home() {
               </span>
             </h1>
 
-            <p className="mt-7 max-w-2xl text-lg leading-8 text-white/55 md:text-xl">
+            <p className="mt-6 w-full max-w-2xl text-base leading-7 text-white/55 sm:text-lg sm:leading-8 md:text-xl">
               Discover music, search your favorite
               songs, create playlists and enjoy your
               personal listening experience with ECHO.
@@ -1132,9 +1132,9 @@ function Home() {
 
             {/* SEARCH */}
 
-            <div className="mt-10 max-w-2xl">
+            <div className="mt-8 w-full max-w-2xl">
 
-              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-2">
+              <div className="flex w-full min-w-0 items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-1.5 sm:p-2">
 
                 <input
                   type="text"
@@ -1152,13 +1152,13 @@ function Home() {
                     handleSearchKeyDown
                   }
                   placeholder="Search songs, artists..."
-                  className="min-w-0 flex-1 bg-transparent px-4 py-3 text-white outline-none placeholder:text-white/30"
+                  className="min-w-0 flex-1 bg-transparent px-3 py-3 text-sm text-white outline-none placeholder:text-white/30 sm:px-4 sm:text-base"
                 />
 
                 <button
                   onClick={searchSongs}
                   disabled={loading}
-                  className="rounded-xl bg-[#27E6B0] px-6 py-3 font-bold text-black disabled:opacity-50"
+                  className="shrink-0 rounded-xl bg-[#27E6B0] px-4 py-3 text-sm font-bold text-black transition hover:brightness-110 disabled:opacity-50 sm:px-6 sm:text-base"
                 >
                   {loading
                     ? "Searching..."
@@ -1189,7 +1189,7 @@ function Home() {
       ================================================= */}
 
       {songs.length > 0 && (
-        <section className="mx-auto max-w-7xl px-5 pb-16">
+        <section className="mx-auto w-full max-w-7xl min-w-0 px-4 pb-16 sm:px-5">
 
           <div className="mb-6">
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#27E6B0]">
@@ -1201,12 +1201,12 @@ function Home() {
             </h2>
           </div>
 
-          <div className="grid gap-3">
+          <div className="grid w-full min-w-0 gap-3">
 
             {songs.map((song, index) => (
               <div
                 key={`${song.id}-${index}`}
-                className="group flex items-center gap-4 rounded-2xl border border-white/5 bg-white/[0.03] p-3 hover:bg-white/[0.06]"
+                className="group flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-2xl border border-white/5 bg-white/[0.03] p-2.5 transition hover:bg-white/[0.06] sm:gap-4 sm:p-3"
               >
 
                 <button
@@ -1222,7 +1222,7 @@ function Home() {
                   <img
                     src={song.artwork}
                     alt={song.title}
-                    className="h-16 w-16 rounded-xl object-cover"
+                    className="h-14 w-14 rounded-xl object-cover sm:h-16 sm:w-16"
                   />
 
                   <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/50 opacity-0 group-hover:opacity-100">
@@ -1238,7 +1238,7 @@ function Home() {
                       index
                     )
                   }
-                  className="min-w-0 flex-1 text-left"
+                  className="min-w-0 flex-1 overflow-hidden text-left"
                 >
                   <p className="truncate font-bold">
                     {song.title}
@@ -1253,7 +1253,7 @@ function Home() {
                   onClick={() =>
                     openPlaylistModal(song)
                   }
-                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-xl text-white/70 hover:border-[#27E6B0] hover:text-[#27E6B0]"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 text-lg text-white/70 transition hover:border-[#27E6B0] hover:text-[#27E6B0] sm:h-10 sm:w-10 sm:text-xl"
                 >
                   +
                 </button>
@@ -1269,7 +1269,7 @@ function Home() {
 
       <section
         id="trending"
-        className="mx-auto max-w-7xl px-5 py-16"
+        className="mx-auto w-full max-w-7xl min-w-0 px-4 py-14 sm:px-5 sm:py-16"
       >
 
         <div className="mb-8">
@@ -1335,7 +1335,7 @@ function Home() {
 
       <section
         id="playlists"
-        className="mx-auto max-w-7xl px-5 py-16"
+        className="mx-auto w-full max-w-7xl min-w-0 px-4 py-14 sm:px-5 sm:py-16"
       >
 
         <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
@@ -1389,7 +1389,7 @@ function Home() {
             </button>
           </div>
         ) : (
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid w-full min-w-0 gap-5 sm:grid-cols-2 lg:grid-cols-3">
 
             {playlists.map((playlist) => {
               const firstSong =
@@ -1508,7 +1508,7 @@ function Home() {
                                     songIndex
                                   )
                                 }
-                                className="min-w-0 flex-1 text-left"
+                                className="min-w-0 flex-1 overflow-hidden text-left"
                               >
                                 <p className="truncate text-sm font-semibold">
                                   {
@@ -1551,7 +1551,7 @@ function Home() {
           MOODS
       ================================================= */}
 
-      <section className="mx-auto max-w-7xl px-5 py-16">
+      <section className="mx-auto w-full max-w-7xl min-w-0 px-4 py-14 sm:px-5 sm:py-16">
 
         <div className="mb-8">
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#27E6B0]">
@@ -1563,7 +1563,7 @@ function Home() {
           </h2>
         </div>
 
-        <div className="grid gap-5 md:grid-cols-3">
+        <div className="grid w-full min-w-0 gap-5 md:grid-cols-3">
 
           {moodPlaylists.map(
             (playlist) => (
@@ -1600,7 +1600,7 @@ function Home() {
           EXPERIENCE
       ================================================= */}
 
-      <section className="mx-auto max-w-7xl px-5 py-20">
+      <section className="mx-auto w-full max-w-7xl min-w-0 px-4 py-16 sm:px-5 sm:py-20">
 
         <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.03] p-8 md:p-14">
 
@@ -1678,7 +1678,7 @@ function Home() {
           CTA
       ================================================= */}
 
-      <section className="mx-auto max-w-7xl px-5 pb-28">
+      <section className="mx-auto w-full max-w-7xl min-w-0 px-4 pb-24 sm:px-5 sm:pb-28">
 
         <div className="relative overflow-hidden rounded-[2rem] bg-[#27E6B0] px-6 py-16 text-center text-black">
 
@@ -1892,9 +1892,9 @@ function Home() {
       ================================================= */}
 
       {currentSong && (
-        <div className="fixed bottom-0 left-0 right-0 z-[80] border-t border-white/10 bg-black/95 backdrop-blur-xl">
+        <div className="fixed inset-x-0 bottom-0 z-[80] w-full border-t border-white/10 bg-black/95 backdrop-blur-xl">
 
-          <div className="mx-auto flex min-h-[205px] max-w-7xl items-center gap-3 px-4 py-2 md:gap-4">
+          <div className="mx-auto flex min-h-[205px] w-full max-w-7xl min-w-0 items-center gap-3 px-3 py-2 sm:px-4 md:gap-4">
 
             {/* SONG INFO */}
 
