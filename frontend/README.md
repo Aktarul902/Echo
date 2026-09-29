@@ -18,9 +18,9 @@ If you are developing a production application, we recommend using TypeScript wi
 
 1. Import this repository into Vercel and set the project **Root Directory** to `frontend`.
 2. Use the Vite defaults: build command `npm run build` and output directory `dist`.
-3. Add `VITE_API_URL` in the Vercel project environment variables. Set it to the public origin of the deployed backend, such as `https://your-backend.example.com`, without a trailing `/api`.
-4. Deploy. The Vercel rewrite in `vercel.json` keeps client-side routes such as `/songs` working on refresh.
+3. Add `YOUTUBE_API_KEY` in the Vercel project environment variables. This is a private server-side variable; do not prefix it with `VITE_`.
+4. Deploy. The Vercel API function handles song search on the same domain, and the rewrite in `vercel.json` keeps client-side routes such as `/songs` working on refresh.
 
 For local development, the frontend expects the backend at `http://localhost:5000`. Set `VITE_API_URL` in a local `.env` file when using a different backend origin.
 
-Set `YOUTUBE_API_KEY` on the backend host. Set `MONGODB_URI` there if MongoDB is enabled. Do not use `VITE_` variables for backend secrets because Vite includes them in the browser bundle.
+For local development, set `VITE_API_URL` in `.env` if your backend is not running at `http://localhost:5000`. Do not put backend secrets in `VITE_` variables because Vite includes them in the browser bundle.
