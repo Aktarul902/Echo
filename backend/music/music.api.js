@@ -1,9 +1,13 @@
 import express from "express"
 import axios from "axios";
 const router = express.Router()
-const api = "AIzaSyDYpC9svEETVLiO89nJZRsQQajlt7e2LJc"
 router.get("/search",async (req,res)=>{
  try {
+    const apiKey = process.env.YOUTUBE_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ message: "YouTube API is not configured" });
+    }
+
     const query = req.query.q || "Bollywood songs";
 
     const response = await axios.get(
@@ -16,7 +20,7 @@ router.get("/search",async (req,res)=>{
           maxResults: 20,
           regionCode: "IN",
           relevanceLanguage: "hi",
-          key:api,
+          key:apiKey,
         },
       }
     );

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { API_BASE_URL } from "../src/config";
 
 function Songs() {
   const [songs, setSongs] = useState([]);
@@ -161,7 +162,7 @@ function Songs() {
       setLoading(true);
 
       const response = await fetch(
-        `http://localhost:5000/api/youtube/search?q=${encodeURIComponent(
+        `${API_BASE_URL}/api/youtube/search?q=${encodeURIComponent(
           query
         )}`
       );

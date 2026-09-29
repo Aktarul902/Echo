@@ -1,10 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import logo from "../src/assets/logo.jpeg";
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL ||
-  (import.meta.env.DEV ? "http://localhost:5001" : "https://echo-6piz.onrender.com");
+import { API_BASE_URL } from "../src/config";
 
 const trendingSongs = [
   {
